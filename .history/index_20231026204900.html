@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Random Number Subscription</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.1.2/socket.io.js"></script>
+    <script type="text/javascript">
+        var socket = io.connect('http://' + document.domain + ':' + location.port);
+
+        socket.on('random_number', function(data) {
+            document.getElementById('random-number').innerText = data.number;
+        });
+    </script>
+</head>
+<body>
+    <h1>Random Number Subscription</h1>
+    <p>Random Number: <span id="random-number"></span></p>
+</body>
+</html>
