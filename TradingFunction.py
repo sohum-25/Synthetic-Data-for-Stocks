@@ -2,7 +2,7 @@ import sqlite3
 import pandas as pd
 from fyers_apiv3 import fyersModel
 from datetime import datetime
-
+"""
 def CalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, inTrade, activeLongPosition, activeShortPosition):
 
     conn = sqlite3.connect(database_path)
@@ -111,7 +111,7 @@ def CalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, inTr
         conn.close()
 
 
-
+"""
 
 
 
@@ -133,6 +133,14 @@ def MockCalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, 
 
         symbol1Socket = "NSE:" + symbol_list[2 * i] + "-EQ"
         symbol2Socket = "NSE:" + symbol_list[2 * i + 1] + "-EQ"
+
+        order_ids_dict = {"id": []}
+        symbol1Socket = "NSE:" + symbol1Socket + "-EQ"
+        symbol2Socket = "NSE:" + symbol2Socket + "-EQ"
+        order_ids_dict["id"].append(symbol1Socket+'-INTRADAY')
+        order_ids_dict["id"].append(symbol2Socket+'-INTRADAY')
+
+
         df = df[[symbol1, symbol2]]
         
         # Calculate the ratio between the two symbols
@@ -147,8 +155,8 @@ def MockCalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, 
         
         # Initialize trade-related variables
     
-        symbol1Qty = int((TotalCapital / 2) / df[symbol1].iloc[-1])
-        symbol2Qty = int((TotalCapital / 2) / df[symbol2].iloc[-1])
+        symbol1Qty = int((5*TotalCapital / 2) / df[symbol1].iloc[-1])
+        symbol2Qty = int((5*TotalCapital / 2) / df[symbol2].iloc[-1])
 
         LongSide = [
             {
@@ -206,48 +214,30 @@ def MockCalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, 
 
         # Check trading conditions
         if df['Ratio'].iloc[-1] < df['StdDown'].iloc[-1] and not inTrade:
-            response=fyers.place_basket_orders(data=LongSide)
-            order_responses=response['data']
-
-            order_ids_dict = {"id": []}
-            for response in order_responses:
-                if 'body' in response and 'id' in response['body']:
-                    order_id = response['body']['id']        
-                    if order_id:
-                        order_ids_dict["id"].append(order_id)
+            fyers.place_basket_orders(data=LongSide)
             activeLongPosition = 1
-            inTrade=True
+            inTrade = True
             print("Entered Long")
 
-        if inTrade and activeLongPosition and df['Ratio'].iloc[-1] > df['EMA'].iloc[-1]:
-           fyers.exit_positions(order_ids_dict)
-           inTrade=False
-           activeLongPosition=False
-           order_ids_dict = {"id": []}
-           print('Long Trade Closed') 
+        elif inTrade and activeLongPosition and df['Ratio'].iloc[-1] >= df['EMA'].iloc[-1]:
+            fyers.exit_positions(order_ids_dict)
+            TotalCapital += fyers.positions()['overall']['pl_realized']
+            inTrade = False
+            activeLongPosition = False
+            print('Long Trade Closed')
 
-        if df['Ratio'].iloc[-1] > df['StdUp'].iloc[-1] and not inTrade :
-            # Enter a Short Position
-            response=fyers.place_basket_orders(data=ShortSide)
-            order_responses=response['data']
-
-            order_ids_dict = {"id": []}
-            for response in order_responses:
-                if 'body' in response and 'id' in response['body']:
-                    order_id = response['body']['id']        
-                    if order_id:
-                        order_ids_dict["id"].append(order_id)
-
+        elif df['Ratio'].iloc[-1] > df['StdUp'].iloc[-1] and not inTrade:
+            fyers.place_basket_orders(data=ShortSide)
             activeShortPosition = 1
-            inTrade=True
+            inTrade = True
             print("Entered Short")
-        
-        if inTrade and activeShortPosition and df['Ratio'].iloc[-1]<df['EMA'].iloc[-1]:
-           fyers.exit_positions(order_ids_dict)
-           inTrade=False
-           activeShortPosition=False
-           order_ids_dict = {"id": []}
-           print('Short Trade Closed') 
+
+        elif inTrade and activeShortPosition and df['Ratio'].iloc[-1] <= df['EMA'].iloc[-1]:
+            fyers.exit_positions(order_ids_dict)
+            TotalCapital += fyers.positions()['overall']['pl_realized']
+            inTrade = False
+            activeShortPosition = False
+            print('Short Trade Closed')
        
         
         current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")

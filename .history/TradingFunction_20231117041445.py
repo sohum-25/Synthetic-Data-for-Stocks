@@ -1,8 +1,12 @@
 import sqlite3
 import pandas as pd
 from fyers_apiv3 import fyersModel
-def CalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, inTrade, activeLongPosition, activeShortPosition):
-
+def CalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, inTrade, activeLongPosition, activeShortPosition,client_id,tk):
+    fyers=fyersModel.FyersModel(client_id=client_id,is_async=False,token=tk,log_path="")
+    TotalCapital = TotalCapital
+    inTrade = inTrade
+    activeLongPosition = activeLongPosition
+    activeShortPosition = activeShortPosition
     conn = sqlite3.connect(database_path)
     
     try:
@@ -33,8 +37,8 @@ def CalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, inTr
         
         # Initialize trade-related variables
     
-        symbol1Qty = int((TotalCapital / 2) / df[symbol1].iloc[-1])
-        symbol2Qty = int((TotalCapital / 2) / df[symbol2].iloc[-1])
+        symbol1Qty = 5 * int((TotalCapital / 2) / df[symbol1].iloc[-1])
+        symbol2Qty = 5 * int((TotalCapital / 2) / df[symbol2].iloc[-1])
 
         LongSide = [
             {
@@ -46,7 +50,7 @@ def CalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, inTr
                 "limitPrice": 0,
                 "stopPrice": 0,
                 "validity": "DAY",
-                "disclosedQty": 0, 
+                "disclosedQty": 0,
                 "offlineOrder": False,
             },
             {
@@ -95,13 +99,13 @@ def CalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, inTr
             fyers.place_basket_orders(data=LongSide)
             inTrade = True
             activeLongPosition = 1
-            print("Entered Long")
+        
         if df['Ratio'].iloc[-1] > df['StdUp'].iloc[-1] and not inTrade:
             # Enter a Short Position
             fyers.place_basket_orders(data=ShortSide)
             inTrade = True
             activeShortPosition = 1
-            print("Entered Short")
+        
         # Check for closing positions
         if inTrade:
             if activeLongPosition and df['Ratio'].iloc[-1] >= df['EMA'].iloc[-1]:
@@ -111,7 +115,6 @@ def CalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, inTr
                 TotalCapital += response["overall"]["pl_realized"]
                 inTrade = 0
                 activeLongPosition = 0
-                print("Long CLosed")
             if activeShortPosition and df['Ratio'].iloc[-1] <= df['EMA'].iloc[-1]:
                 # Close the Short Position
                 fyers.exit_positions(data={})
@@ -119,11 +122,6 @@ def CalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, inTr
                 TotalCapital += response["overall"]["pl_realized"]
                 inTrade = 0
                 activeShortPosition = 0
-                print("Short CLosed")
-        if not inTrade:
-            print("No trading opportunity at the moment")
-
-
         return TotalCapital, inTrade, activeLongPosition, activeShortPosition
     except Exception as e:
         print(f"Error analyzing tick data: {e}")

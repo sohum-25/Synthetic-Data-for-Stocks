@@ -1,6 +1,8 @@
 import sqlite3
 import pandas as pd
 from fyers_apiv3 import fyersModel
+from datetime import datetime
+
 def CalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, inTrade, activeLongPosition, activeShortPosition):
 
     conn = sqlite3.connect(database_path)
@@ -28,8 +30,8 @@ def CalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, inTr
         df['EMA'] = df['Ratio'].rolling(20).mean()
         
         # Calculate the upper and lower standard deviation bands
-        df['StdDown'] = df['EMA'] - df['EMA'].rolling(20).std()
-        df['StdUp'] = df['EMA'] + df['EMA'].rolling(20).std()
+        df['StdDown'] = df['Ratio'] - df['Ratio'].rolling(20).std()
+        df['StdUp'] = df['Ratio'] + df['Ratio'].rolling(20).std()
         
         # Initialize trade-related variables
     
@@ -91,39 +93,16 @@ def CalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, inTr
         ]
 
         # Check trading conditions
-        if df['Ratio'].iloc[-1] < df['StdDown'].iloc[-1] and not inTrade:
+        if df['Ratio'].iloc[-1] < df['StdDown'].iloc[-1]:
             fyers.place_basket_orders(data=LongSide)
-            inTrade = True
-            activeLongPosition = 1
+           
             print("Entered Long")
-        if df['Ratio'].iloc[-1] > df['StdUp'].iloc[-1] and not inTrade:
+        if df['Ratio'].iloc[-1] > df['StdUp'].iloc[-1]:
             # Enter a Short Position
             fyers.place_basket_orders(data=ShortSide)
-            inTrade = True
-            activeShortPosition = 1
             print("Entered Short")
         # Check for closing positions
-        if inTrade:
-            if activeLongPosition and df['Ratio'].iloc[-1] >= df['EMA'].iloc[-1]:
-                # Close the Long Position
-                fyers.exit_positions(data={})
-                response = fyers.positions()
-                TotalCapital += response["overall"]["pl_realized"]
-                inTrade = 0
-                activeLongPosition = 0
-                print("Long CLosed")
-            if activeShortPosition and df['Ratio'].iloc[-1] <= df['EMA'].iloc[-1]:
-                # Close the Short Position
-                fyers.exit_positions(data={})
-                response = fyers.positions()
-                TotalCapital += response["overall"]["pl_realized"]
-                inTrade = 0
-                activeShortPosition = 0
-                print("Short CLosed")
-        if not inTrade:
-            print("No trading opportunity at the moment")
-            print(symbol1Qty,symbol2Qty)
-
+       
         return TotalCapital, inTrade, activeLongPosition, activeShortPosition
     except Exception as e:
         print(f"Error analyzing tick data: {e}")
@@ -147,13 +126,21 @@ def MockCalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, 
         
         # Set the 'Datetime' column as the index
         df.set_index('Datetime', inplace=True)
-        
+        df=df.iloc[::-1]
         # Select the columns corresponding to the two symbols for analysis
         symbol1 = symbol_list[2 * i]
         symbol2 = symbol_list[2 * i + 1]
 
         symbol1Socket = "NSE:" + symbol_list[2 * i] + "-EQ"
         symbol2Socket = "NSE:" + symbol_list[2 * i + 1] + "-EQ"
+
+        order_ids_dict = {"id": []}
+        symbol1Socket = "NSE:" + symbol1Socket + "-EQ"
+        symbol2Socket = "NSE:" + symbol2Socket + "-EQ"
+        order_ids_dict["id"].append(symbol1Socket+'-INTRADAY')
+        order_ids_dict["id"].append(symbol2Socket+'-INTRADAY')
+
+
         df = df[[symbol1, symbol2]]
         
         # Calculate the ratio between the two symbols
@@ -163,8 +150,8 @@ def MockCalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, 
         df['EMA'] = df['Ratio'].rolling(20).mean()
         
         # Calculate the upper and lower standard deviation bands
-        df['StdDown'] = df['EMA'] - df['EMA'].rolling(20).std()
-        df['StdUp'] = df['EMA'] + df['EMA'].rolling(20).std()
+        df['StdDown'] = df['EMA'] - df['Ratio'].rolling(20).std()
+        df['StdUp'] = df['EMA'] + df['Ratio'].rolling(20).std()
         
         # Initialize trade-related variables
     
@@ -227,37 +214,36 @@ def MockCalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, 
 
         # Check trading conditions
         if df['Ratio'].iloc[-1] < df['StdDown'].iloc[-1] and not inTrade:
-            # fyers.place_basket_orders(data=LongSide)
-            inTrade = True
+            response=fyers.place_basket_orders(data=LongSide)
             activeLongPosition = 1
+            inTrade=True
             print("Entered Long")
-        if df['Ratio'].iloc[-1] > df['StdUp'].iloc[-1] and not inTrade:
+
+        if inTrade and activeLongPosition and df['Ratio'].iloc[-1] > df['EMA'].iloc[-1]:
+           fyers.exit_positions(order_ids_dict)
+           TotalCapital+=fyers.positions()['overall']['pl_realized']
+           inTrade=False
+           activeLongPosition=False
+           print('Long Trade Closed') 
+
+        if df['Ratio'].iloc[-1] > df['StdUp'].iloc[-1] and not inTrade :
             # Enter a Short Position
-           # fyers.place_basket_orders(data=ShortSide)
-            inTrade = True
+            response=fyers.place_basket_orders(data=ShortSide)
             activeShortPosition = 1
+            inTrade=True
             print("Entered Short")
-        # Check for closing positions
-        if inTrade:
-            if activeLongPosition and df['Ratio'].iloc[-1] >= df['EMA'].iloc[-1]:
-                # Close the Long Position
-              #  fyers.exit_positions(data={})
-               # response = fyers.positions()
-              #  TotalCapital += response["overall"]["pl_realized"]
-                inTrade = 0
-                activeLongPosition = 0
-                print("Long CLosed")
-            if activeShortPosition and df['Ratio'].iloc[-1] <= df['EMA'].iloc[-1]:
-                # Close the Short Position
-              #  fyers.exit_positions(data={})
-              #  response = fyers.positions()
-              #  TotalCapital += response["overall"]["pl_realized"]
-                inTrade = 0
-                activeShortPosition = 0
-                print("Short CLosed")
-        if not inTrade:
-            print("No trading opportunity at the moment")
-            print(symbol1,symbol1Qty,symbol2,symbol2Qty,df.iloc[-1])
+        
+        if inTrade and activeShortPosition and df['Ratio'].iloc[-1]<df['EMA'].iloc[-1]:
+           fyers.exit_positions(order_ids_dict)
+           TotalCapital+=fyers.positions()['overall']['pl_realized']
+           inTrade=False
+           activeShortPosition=False
+           print('Short Trade Closed') 
+       
+        
+        current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+        print(f"No trading opportunity at the moment - Executed at {current_timestamp}")
+        print(TotalCapital,inTrade,activeLongPosition,activeShortPosition)
 
         return TotalCapital, inTrade, activeLongPosition, activeShortPosition
     except Exception as e:
@@ -265,3 +251,7 @@ def MockCalculateParameters(database_path, symbol_list, i, TotalCapital, fyers, 
         return (TotalCapital, inTrade, activeLongPosition, activeShortPosition)  # Ensure to return a tuple
     finally:
         conn.close()
+
+
+
+

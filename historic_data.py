@@ -34,7 +34,7 @@ def UpdateHistoricData(path):
 
 
 
-    df=yf.download(tickers=modified_list,interval='2m',period='3d')['Close']
+    df=yf.download(tickers=modified_list,interval='2m',period='20d')['Close']
     df=df.dropna()
     df-df.dropna(axis=1)
     columns_to_rename = modified_list
